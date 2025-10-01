@@ -1,0 +1,60 @@
+# AI-SCHOLAR Configuration File
+# This file contains non-sensitive configuration settings
+# Sensitive credentials (API keys, endpoints) are managed in .env file
+
+# OpenAI/Azure OpenAI Configuration
+openai:
+  model: "gpt-5"  # Default OpenAI model to use
+  api_provider: "openai"  # Options: "openai" or "azure"
+
+# Azure OpenAI specific settings (when using azure provider)
+azure_openai:
+  api_version: "2025-01-01-preview"
+  deployment_name: "gpt-4.1-nano"
+
+# Google Sheets Configuration
+sheets:
+  # Spreadsheet and worksheet names
+  spreadsheet_name: "AI-SCHOLAR運用管理システム"
+  worksheet_name: "LLM-Papers"
+  
+  # Column indices (1-based indexing as used by gspread)
+  columns:
+    title: 2
+    url: 3
+    processing_date: 5
+    detailed_summary: 6
+    three_point_summary: 7
+    status: 8
+  
+  # Row configuration
+  header_row_count: 1
+
+# Processing Configuration
+processing:
+  # Sections to generate detailed summaries for
+  sections:
+    - "研究背景"
+    - "研究手法" 
+    - "実験"
+  
+  # Rate limiting (requests per minute)
+  rate_limit:
+    requests_per_minute: 60
+  
+  # API call settings
+  api_settings:
+    retry_attempts: 3
+    retry_min_wait: 4
+    retry_max_wait: 10
+
+# File and directory paths (relative to project root)
+paths:
+  # Directory to save downloaded papers
+  content_dir: "content"
+  
+  # Prompts directory
+  prompts_dir: "prompts"
+  
+  # Figures directory for extracted images
+  figures_dir: "figures"
