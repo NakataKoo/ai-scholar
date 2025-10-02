@@ -20,6 +20,7 @@ ignore = [  # 無効化する項目
   "RUF003",# 全角記号など`ambiguous unicode character`も使いたいため
   "DOC",   # docstringsに関するルール
   "S403",  # pickleインポートNG
+  "G004",  # logging内のf-string
 ]
 
 [lint.per-file-ignores]  # 特定のファイルでのみ項目を無効化
