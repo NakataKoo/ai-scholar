@@ -1,0 +1,40 @@
+target-version = "py311"  # Python 3.11
+preview = true  # プレビュー段階の項目も適用
+line-length = 119  # 1行の最大文字数
+
+[lint]
+select = ["ALL"]  # 全ての項目を有効化
+ignore = [  # 無効化する項目
+  "D",
+  "F401",  # 未使用のimportを削除
+  "T201",  # print()が使用されている場合に削除
+  "N803",  # 関数の引数がスネークケースになっていない
+  "COM812",# 複数行リストや辞書で末尾にカンマを置く
+  "ISC001",# 文字列リテラルを隣接させて結合
+  "RET503",# 関数にreturnが必要,
+  "ERA",   # コメントアウトされたコード
+  "CPY001",# 著作権の確認
+  "PD002", #すでにpandasで`inplace=True`はいろんなところで使っているため
+  "RUF001",# 全角記号など`ambiguous unicode character`も使いたいため
+  "RUF002",# 全角記号など`ambiguous unicode character`も使いたいため
+  "RUF003",# 全角記号など`ambiguous unicode character`も使いたいため
+  "DOC",   # docstringsに関するルール
+  "S403",  # pickleインポートNG
+]
+
+[lint.per-file-ignores]  # 特定のファイルでのみ項目を無効化
+"__init__.py" = [
+  "D104",  # パッケージのdocstringを記載する(無効化)
+  "E402",  # モジュールのimportはファイルのトップに記載する(無効化)
+]
+
+[lint.pydocstyle]
+convention = "google"  # Googleスタイルのdocstringを使用（（例: 引数・戻り値を Args: Returns: で書く形式））
+
+[format]
+quote-style = "double" # ダブルクオーテーション化
+indent-style = "space" # インデントスタイル
+skip-magic-trailing-comma = false # マジックなトレーリングカンマ（末尾のカンマ）を（スキップ）無視するかどうか
+line-ending = "auto" # 改行コード（既存ファイルの改行スタイル維持）
+docstring-code-format = true # docstring内のコードブロックを自動整形
+docstring-code-line-length = "dynamic" # docstring内のコードブロックの行長制御
