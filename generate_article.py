@@ -33,6 +33,7 @@ from pdf2image.exceptions import (
     PDFSyntaxError
 )
 from PIL import Image
+from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 load_dotenv()
@@ -136,6 +137,11 @@ def get_openai_client():
 openai_client = get_openai_client()
 
 
+class TextResponse(BaseModel):
+    """Pydantic model for structured text response to ensure text-only output."""
+    content: str
+
+
 
 def get_google_sheets_client(credentials_path: str):
     """Initialize and return Google Sheets client.
@@ -231,18 +237,20 @@ def call_openai_with_images(system_prompt: str, user_prompt: str,
     ]
     
     try:
-        response = openai_client.responses.create(
+        response = openai_client.responses.parse(
             model=OPENAI_MODEL,
-            input=messages
+            input=messages,
+            text_format=TextResponse
         )
-        
+
         logger.info(f"API call successful. Tokens used - "
                    f"Input: {response.usage.input_tokens}, "
                    f"Output: {response.usage.output_tokens}, "
                    f"Total: {response.usage.total_tokens}")
-        
-        return response.output_text
-        
+
+        # Return structured text content from parsed Pydantic model
+        return response.output_parsed.content
+
     except Exception as e:
         logger.error(f"Error in OpenAI API call: {str(e)}")
         raise
