@@ -4,7 +4,7 @@
 
 # OpenAI/Azure OpenAI Configuration
 openai:
-  model: "gpt-5"  # Default OpenAI model to use
+  model: "gpt-4o"  # Default OpenAI model to use
   api_provider: "openai"  # Options: "openai" or "azure"
 
 # Azure OpenAI specific settings (when using azure provider)
