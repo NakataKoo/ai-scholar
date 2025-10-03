@@ -2,7 +2,25 @@
 # This file contains non-sensitive configuration settings
 # Sensitive credentials (API keys, endpoints) are managed in .env file
 
-# OpenAI/Azure OpenAI Configuration
+# Workflow Configuration - LLM settings for each phase
+workflow:
+  # Phase 1: Paper Analysis (論文読む係のLLM)
+  paper_analyzer:
+    model: "gpt-4o"
+    api_provider: "openai"  # Options: "openai" or "azure"
+  
+  # Phase 2: Article Writing (記事書く係のLLM)
+  article_writer:
+    model: "gpt-4o"
+    api_provider: "openai"
+  
+  # Phase 3: Evaluation (評価用LLM)
+  evaluator:
+    model: "gpt-4o"
+    api_provider: "openai"
+    max_iterations: 3  # Maximum number of evaluation-improvement cycles
+
+# OpenAI/Azure OpenAI Configuration (default settings)
 openai:
   model: "gpt-4o"  # Default OpenAI model to use
   api_provider: "openai"  # Options: "openai" or "azure"
@@ -18,7 +36,7 @@ sheets:
   spreadsheet_name: "AI-SCHOLAR運用管理システム"
   worksheet_name: "LLM-Papers"
   
-  # Column indices (1-based indexing as used by gspread)
+  # 「列名」: 「列インデックス」（1始まり）
   columns:
     title: 2
     url: 3

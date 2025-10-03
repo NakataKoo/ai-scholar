@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))  # Adjust path to import utils
 from src.utils.config import load_config
 from src.utils.helper import download_paper, pdf_to_base64
-from src.utils.openai import generate_detailed_section_summary, generate_three_point_summary
+from src.utils.openai import generate_three_point_summary
+from src.core.workflow import generate_detailed_summary_with_workflow
 from src.utils.sheet_helper import (
     get_google_sheets_client,
     mark_error_status,
@@ -110,17 +111,10 @@ def paper_reader(arxiv_url: str, title: str) -> tuple:
         pdf_path = download_paper(arxiv_url, save_dir_name)
         pdf_images = pdf_to_base64(pdf_path)
 
-        # Generate paper explanation
-        # TODO: AIワークフローを構築
-
-        detailed_summary = ""
-        three_point_summary = ""
-
-        for section in SECTIONS:
-            logger.info("Processing section: %s", section)
-            detailed_summary += f"\n\n## {section}\n\n" + generate_detailed_section_summary(
-                pdf_images, section, detailed_summary
-            )
+        # Generate paper explanation using AI workflow
+        # Workflow: Prompt-Chaining (Paper Analysis → Article Writing → Evaluation & Improvement)
+        logger.info("Starting AI workflow for detailed summary generation")
+        detailed_summary = generate_detailed_summary_with_workflow(pdf_images, SECTIONS)
 
         logger.info("Generating 3-point summary")
         three_point_summary = generate_three_point_summary(pdf_images)

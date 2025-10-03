@@ -56,3 +56,90 @@ def get_three_point_system_prompt() -> str:
         str: System prompt text for 3-point summary
     """
     return load_prompt("three_point_system_prompt.txt")
+
+
+
+# Workflow prompt loaders
+
+def get_paper_analysis_system_prompt() -> str:
+    """Get system prompt for paper analysis phase.
+
+    Returns:
+        str: System prompt text for paper analysis
+    """
+    return load_prompt("paper_analysis_system.txt")
+
+
+def get_paper_analysis_user_prompt(section: str) -> str:
+    """Generate paper analysis user prompt for a specific section.
+
+    Args:
+        section (str): Section name to analyze
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("paper_analysis_user.txt")
+    return template.format(section=section)
+
+
+def get_article_writer_system_prompt() -> str:
+    """Get system prompt for article writing phase.
+
+    Returns:
+        str: System prompt text for article writing
+    """
+    return load_prompt("article_writer_system.txt")
+
+
+def get_article_writer_user_prompt(section: str, analysis: str, context: str) -> str:
+    """Generate article writer user prompt.
+
+    Args:
+        section (str): Section name to write about
+        analysis (str): Analysis result from paper analyzer
+        context (str): Context from previous sections
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("article_writer_user.txt")
+    return template.format(section=section, analysis=analysis, context=context)
+
+
+def get_article_revision_user_prompt(previous_article: str, feedback: str, analysis: str) -> str:
+    """Generate article revision user prompt.
+
+    Args:
+        previous_article (str): Previous version of the article
+        feedback (str): Feedback from evaluator
+        analysis (str): Analysis result from paper analyzer
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("article_revision_user.txt")
+    return template.format(previous_article=previous_article, feedback=feedback, analysis=analysis)
+
+
+def get_evaluator_system_prompt() -> str:
+    """Get system prompt for article evaluation phase.
+
+    Returns:
+        str: System prompt text for evaluation
+    """
+    return load_prompt("evaluator_system.txt")
+
+
+def get_evaluator_user_prompt(article: str, analysis: str) -> str:
+    """Generate evaluator user prompt.
+
+    Args:
+        article (str): Article to evaluate
+        analysis (str): Analysis result from paper analyzer (for reference)
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("evaluator_user.txt")
+    return template.format(article=article, analysis=analysis)
