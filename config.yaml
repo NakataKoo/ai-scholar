@@ -6,7 +6,7 @@
 workflow:
   # Phase 1: Paper Analysis (論文読む係のLLM)
   paper_analyzer:
-    model: "gpt-4o"
+    model: "gpt-5"
     api_provider: "openai"  # Options: "openai" or "azure"
   
   # Phase 2: Article Writing (記事書く係のLLM)
@@ -16,10 +16,27 @@ workflow:
   
   # Phase 3: Evaluation (評価用LLM)
   evaluator:
-    model: "gpt-4o"
+    model: "gpt-5"
     api_provider: "openai"
     max_iterations: 3  # Maximum number of evaluation-improvement cycles
     early_exit_threshold: 8  # Exit if all scores >= this value (0-10 scale)
+
+  # Phase 4: Whole Article Evaluation (記事全体評価用LLM)
+  whole_article_evaluator:
+    model: "gpt-5"
+    api_provider: "openai"
+    max_iterations: 2  # Maximum number of whole article evaluation-improvement cycles
+    early_exit_threshold: 8  # Exit if all scores >= this value (0-10 scale)
+
+  # Phase 5: Three Point Summary (3点要約用LLM)
+  three_point_summary:
+    model: "gpt-4o"
+    api_provider: "openai"
+
+  # Phase 6: Heading Generation (見出し生成用LLM)
+  heading_generator:
+    model: "gpt-4o"
+    api_provider: "openai"
 
 # OpenAI/Azure OpenAI Configuration (default settings)
 openai:
@@ -45,6 +62,7 @@ sheets:
     detailed_summary: 6
     three_point_summary: 7
     status: 8
+    heading_names: 9
   
   # Row configuration
   header_row_count: 1

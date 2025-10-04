@@ -346,10 +346,18 @@ def generate_three_point_summary(pdf_images: list) -> str:
     """
     try:
         logger.info("Generating 3-point summary")
+        
+        workflow_config = config.get("workflow", {})
+        summary_config = workflow_config.get("three_point_summary", {})
+        model = summary_config.get("model", OPENAI_MODEL)
+        api_provider = summary_config.get("api_provider", SELECT_API)
+        
         response = call_openai_with_images(
             system_prompt=get_three_point_system_prompt(),
             user_prompt=get_three_point_summary_prompt(),
             pdf_images=pdf_images,
+            model=model,
+            api_provider=api_provider,
         )
         return response
     except Exception as e:
@@ -451,7 +459,7 @@ def generate_article_section(pdf_images: list, section: str, analysis: str, cont
 
 
 def evaluate_article(
-    pdf_images: list, article: str, analysis: str, section: str = "evaluation", iteration: int = 1
+    pdf_images: list, article: str, analysis: str, section: str = "evaluation", iteration: int = 1, is_whole_article: bool = False
 ) -> EvaluationResponse:
     """Evaluate article quality and provide feedback using Structured Output.
 
@@ -461,23 +469,38 @@ def evaluate_article(
         analysis (str): Analysis result from paper analyzer (for reference)
         section (str, optional): Section name being evaluated. Defaults to "evaluation".
         iteration (int, optional): Iteration number in evaluation loop. Defaults to 1.
+        is_whole_article (bool, optional): If True, use whole article evaluation prompts. Defaults to False.
 
     Returns:
         EvaluationResponse: Structured evaluation result with pass/fail, feedback, and scores
     """
     try:
-        from src.utils.prompt_loader import get_evaluator_system_prompt, get_evaluator_user_prompt
+        from src.utils.prompt_loader import (
+            get_evaluator_system_prompt,
+            get_evaluator_user_prompt,
+            get_evaluator_whole_article_system_prompt,
+            get_evaluator_whole_article_user_prompt,
+        )
 
-        logger.info("Evaluating article")
+        logger.info("Evaluating article (whole_article=%s)", is_whole_article)
 
         workflow_config = config.get("workflow", {})
-        evaluator_config = workflow_config.get("evaluator", {})
+        
+        if is_whole_article:
+            evaluator_config = workflow_config.get("whole_article_evaluator", {})
+            system_prompt = get_evaluator_whole_article_system_prompt()
+            user_prompt = get_evaluator_whole_article_user_prompt(article, analysis)
+        else:
+            evaluator_config = workflow_config.get("evaluator", {})
+            system_prompt = get_evaluator_system_prompt()
+            user_prompt = get_evaluator_user_prompt(article, analysis)
+        
         model = evaluator_config.get("model", OPENAI_MODEL)
         api_provider = evaluator_config.get("api_provider", SELECT_API)
 
         evaluation = call_openai_text_only(
-            system_prompt=get_evaluator_system_prompt(),
-            user_prompt=get_evaluator_user_prompt(article, analysis),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             model=model,
             api_provider=api_provider,
             response_format=EvaluationResponse,
@@ -512,7 +535,7 @@ def evaluate_article(
     ),
 )
 def revise_article(
-    pdf_images: list, previous_article: str, feedback: str, analysis: str, section: str = "revision", iteration: int = 1
+    pdf_images: list, previous_article: str, feedback: str, analysis: str, section: str = "revision", iteration: int = 1, is_whole_article: bool = False
 ) -> str:
     """Revise article based on evaluation feedback.
 
@@ -523,23 +546,33 @@ def revise_article(
         analysis (str): Analysis result from paper analyzer
         section (str, optional): Section name being revised. Defaults to "revision".
         iteration (int, optional): Iteration number in revision loop. Defaults to 1.
+        is_whole_article (bool, optional): If True, use whole article revision prompts. Defaults to False.
 
     Returns:
         str: Revised article text
     """
     try:
-        from src.utils.prompt_loader import get_article_revision_user_prompt, get_article_writer_system_prompt
+        from src.utils.prompt_loader import (
+            get_article_revision_user_prompt,
+            get_article_revision_whole_user_prompt,
+            get_article_writer_system_prompt,
+        )
 
-        logger.info("Revising article based on feedback")
+        logger.info("Revising article based on feedback (whole_article=%s)", is_whole_article)
 
         workflow_config = config.get("workflow", {})
         writer_config = workflow_config.get("article_writer", {})
         model = writer_config.get("model", OPENAI_MODEL)
         api_provider = writer_config.get("api_provider", SELECT_API)
 
+        if is_whole_article:
+            user_prompt = get_article_revision_whole_user_prompt(previous_article, feedback, analysis)
+        else:
+            user_prompt = get_article_revision_user_prompt(previous_article, feedback, analysis)
+
         response = call_openai_text_only(
             system_prompt=get_article_writer_system_prompt(),
-            user_prompt=get_article_revision_user_prompt(previous_article, feedback, analysis),
+            user_prompt=user_prompt,
             model=model,
             api_provider=api_provider,
             response_format=TextResponse,
@@ -550,4 +583,47 @@ def revise_article(
         return response.content
     except Exception as e:
         logger.error(f"Error revising article: {e!s}")
+        raise
+
+
+@retry(
+    stop=stop_after_attempt(config["processing"]["api_settings"]["retry_attempts"]),
+    wait=wait_exponential(
+        multiplier=1,
+        min=config["processing"]["api_settings"]["retry_min_wait"],
+        max=config["processing"]["api_settings"]["retry_max_wait"],
+    ),
+)
+def generate_section_heading(section: str, section_content: str) -> str:
+    """Generate heading for a specific section based on its content.
+
+    Args:
+        section (str): Section name to generate heading for
+        section_content (str): Content of the section
+
+    Returns:
+        str: Generated heading text
+    """
+    try:
+        from src.utils.prompt_loader import get_heading_generator_system_prompt, get_heading_generator_user_prompt
+
+        logger.info("Generating heading for section: %s", section)
+
+        workflow_config = config.get("workflow", {})
+        heading_config = workflow_config.get("heading_generator", {})
+        model = heading_config.get("model", OPENAI_MODEL)
+        api_provider = heading_config.get("api_provider", SELECT_API)
+
+        response = call_openai_text_only(
+            system_prompt=get_heading_generator_system_prompt(),
+            user_prompt=get_heading_generator_user_prompt(section, section_content),
+            model=model,
+            api_provider=api_provider,
+            response_format=TextResponse,
+            llm_role="heading_generator",
+            section=section,
+        )
+        return response.content
+    except Exception as e:
+        logger.error(f"Error generating heading for section {section}: {e!s}")
         raise

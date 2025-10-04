@@ -143,3 +143,65 @@ def get_evaluator_user_prompt(article: str, analysis: str) -> str:
     """
     template = load_prompt("evaluator_user.txt")
     return template.format(article=article, analysis=analysis)
+
+
+
+def get_evaluator_whole_article_system_prompt() -> str:
+    """Get system prompt for whole article evaluation phase.
+
+    Returns:
+        str: System prompt text for whole article evaluation
+    """
+    return load_prompt("evaluator_whole_article_system.txt")
+
+
+def get_evaluator_whole_article_user_prompt(article: str, analysis: str) -> str:
+    """Generate evaluator user prompt for whole article evaluation.
+
+    Args:
+        article (str): Whole article to evaluate
+        analysis (str): Analysis result from paper analyzer (for reference)
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("evaluator_whole_article_user.txt")
+    return template.format(article=article, analysis=analysis)
+
+
+def get_article_revision_whole_user_prompt(previous_article: str, feedback: str, analysis: str) -> str:
+    """Generate article revision user prompt for whole article.
+
+    Args:
+        previous_article (str): Previous version of the whole article
+        feedback (str): Feedback from evaluator
+        analysis (str): Analysis result from paper analyzer
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("article_revision_whole_user.txt")
+    return template.format(previous_article=previous_article, feedback=feedback, analysis=analysis)
+
+
+def get_heading_generator_system_prompt() -> str:
+    """Get system prompt for heading generation phase.
+
+    Returns:
+        str: System prompt text for heading generation
+    """
+    return load_prompt("heading_generator_system.txt")
+
+
+def get_heading_generator_user_prompt(section: str, section_content: str) -> str:
+    """Generate heading generator user prompt.
+
+    Args:
+        section (str): Section name to generate heading for
+        section_content (str): Content of the section
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("heading_generator_user.txt")
+    return template.format(section=section, section_content=section_content)

@@ -26,7 +26,7 @@ config = load_config(config_path="config.yaml", logger=logger)
 
 
 def evaluator_optimizer_loop(
-    pdf_images: list, initial_article: str, analysis: str, section: str, max_iterations: int | None = None
+    pdf_images: list, initial_article: str, analysis: str, section: str, max_iterations: int | None = None, is_whole_article: bool = False
 ) -> str:
     """Execute Evaluator-Optimizer workflow loop.
 
@@ -42,31 +42,38 @@ def evaluator_optimizer_loop(
         section (str): Section name being processed (for logging)
         max_iterations (int, optional): Maximum number of evaluation cycles.
                                        If None, uses config value.
+        is_whole_article (bool, optional): If True, use whole article evaluation settings. Defaults to False.
 
     Returns:
         str: Final article (either passed evaluation or reached max iterations)
     """
     if max_iterations is None:
         workflow_config = config.get("workflow", {})
-        evaluator_config = workflow_config.get("evaluator", {})
+        if is_whole_article:
+            evaluator_config = workflow_config.get("whole_article_evaluator", {})
+        else:
+            evaluator_config = workflow_config.get("evaluator", {})
         max_iterations = evaluator_config.get("max_iterations", 3)
     
     # Get early exit threshold from config
     workflow_config = config.get("workflow", {})
-    evaluator_config = workflow_config.get("evaluator", {})
+    if is_whole_article:
+        evaluator_config = workflow_config.get("whole_article_evaluator", {})
+    else:
+        evaluator_config = workflow_config.get("evaluator", {})
     early_exit_threshold = evaluator_config.get("early_exit_threshold", 8)
 
     current_article = initial_article
     iteration = 0
 
-    logger.info("Starting Evaluator-Optimizer loop (max iterations: %d)", max_iterations)
+    logger.info("Starting Evaluator-Optimizer loop (max iterations: %d, whole_article: %s)", max_iterations, is_whole_article)
 
     while iteration < max_iterations:
         iteration += 1
         logger.info("Evaluation iteration %d/%d", iteration, max_iterations)
 
         # Phase 3a: Evaluate article
-        evaluation = evaluate_article(pdf_images, current_article, analysis, section=section, iteration=iteration)
+        evaluation = evaluate_article(pdf_images, current_article, analysis, section=section, iteration=iteration, is_whole_article=is_whole_article)
 
         # Check if article passes evaluation
         if evaluation.pass_evaluation:
@@ -99,7 +106,7 @@ def evaluator_optimizer_loop(
                    evaluation.score.style, evaluation.score.compliance)
 
         # Phase 3b: Revise article based on feedback
-        current_article = revise_article(pdf_images, current_article, feedback, analysis, section=section, iteration=iteration)
+        current_article = revise_article(pdf_images, current_article, feedback, analysis, section=section, iteration=iteration, is_whole_article=is_whole_article)
         logger.info("Article revised based on feedback")
 
     # Max iterations reached
@@ -152,37 +159,86 @@ def process_section_with_workflow(pdf_images: list, section: str, context: str =
     return analysis, final_article
 
 
-def generate_detailed_summary_with_workflow(pdf_images: list, sections: list) -> str:
-    """Generate detailed summary for all sections using AI workflow.
+def generate_detailed_summary_with_workflow(pdf_images: list, sections: list) -> tuple:
+    """Generate detailed summary and section headings for all sections using AI workflow.
 
     This is the main entry point for generating detailed summaries.
     It processes each section sequentially using the workflow and
-    chains the context forward.
+    chains the context forward. After combining all sections, it runs
+    a final evaluation-improvement loop on the whole article, followed
+    by heading generation for each section.
 
     Args:
         pdf_images (list): List of base64-encoded PDF page images
         sections (list): List of section names to process
 
     Returns:
-        str: Complete detailed summary with all sections
+        tuple: (final_summary, section_headings)
+               - final_summary: Complete detailed summary with all sections
+               - section_headings: Dictionary mapping section names to generated headings
     """
     logger.info("Starting detailed summary generation with AI workflow")
     logger.info("Sections to process: %s", sections)
 
     detailed_summary = ""
     context = ""
+    all_analysis = ""  # Collect all analysis results for whole article evaluation
+    section_contents = {}  # Store each section's content for heading generation
 
+    # Process each section individually
     for section in sections:
         # Process section with workflow
-        _, article = process_section_with_workflow(pdf_images, section, context)
+        analysis, article = process_section_with_workflow(pdf_images, section, context)
+
+        # Collect analysis results
+        all_analysis += f"\n\n## {section}\n\n{analysis}"
 
         # Add to detailed summary
         detailed_summary += f"\n\n## {section}\n\n{article}"
+
+        # Store section content for heading generation
+        section_contents[section] = article
 
         # Update context for next section (Prompt-Chaining)
         context = detailed_summary
 
         logger.info("Section '%s' added to detailed summary", section)
 
+    logger.info("All sections processed. Starting whole article evaluation.")
+
+    # Phase 4: Whole Article Evaluation & Improvement
+    logger.info("=" * 60)
+    logger.info("Phase 4: Whole Article Evaluation & Improvement")
+    logger.info("=" * 60)
+
+    final_summary = evaluator_optimizer_loop(
+        pdf_images=pdf_images,
+        initial_article=detailed_summary,
+        analysis=all_analysis,
+        section="whole_article",
+        is_whole_article=True
+    )
+
+    logger.info("=" * 60)
+    logger.info("Whole article evaluation completed")
+    logger.info("=" * 60)
+
+    # Phase 5: Section Heading Generation
+    logger.info("=" * 60)
+    logger.info("Phase 5: Section Heading Generation")
+    logger.info("=" * 60)
+
+    from src.utils.openai import generate_section_heading
+
+    section_headings = {}
+    for section in sections:
+        heading = generate_section_heading(section, section_contents[section])
+        section_headings[section] = heading
+        logger.info("Generated heading for '%s': %s", section, heading)
+
+    logger.info("=" * 60)
+    logger.info("Heading generation completed")
+    logger.info("=" * 60)
+
     logger.info("Detailed summary generation completed")
-    return detailed_summary
+    return final_summary, section_headings

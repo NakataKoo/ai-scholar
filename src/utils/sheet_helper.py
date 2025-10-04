@@ -43,6 +43,7 @@ def update_processing_results(
     row_index: int,
     detailed_summary: str,
     three_point_summary: str,
+    heading_names: str,
     processing_date: str,
     columns: dict,
 ):
@@ -53,13 +54,15 @@ def update_processing_results(
         row_index (int): Row index to update
         detailed_summary (str): Detailed summary text
         three_point_summary (str): Three-point summary text
+        heading_names (str): Section heading names (newline-separated)
         processing_date (str): Processing date string
         columns (dict): Dictionary containing column indices with keys:
-            'processing_date', 'detailed_summary', 'three_point_summary', 'status'
+            'processing_date', 'detailed_summary', 'three_point_summary', 'heading_names', 'status'
     """
     sheet.update_cell(row_index, columns["processing_date"], processing_date)
     sheet.update_cell(row_index, columns["detailed_summary"], detailed_summary)
     sheet.update_cell(row_index, columns["three_point_summary"], three_point_summary)
+    sheet.update_cell(row_index, columns["heading_names"], heading_names)
     sheet.update_cell(row_index, columns["status"], "完了")
 
 
