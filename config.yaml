@@ -2,15 +2,61 @@
 # This file contains non-sensitive configuration settings
 # Sensitive credentials (API keys, endpoints) are managed in .env file
 
-# OpenAI/Azure OpenAI Configuration
+# Workflow Configuration - LLM settings for each phase
+workflow:
+  # Phase 1: Paper Analysis (論文読む係のLLM)
+  paper_analyzer:
+    model: "gpt-5"
+    api_provider: "openai"  # Options: "openai" or "azure"
+  
+  # Phase 2: Article Writing (記事書く係のLLM)
+  article_writer:
+    model: "claude-sonnet-4-20250514"
+    api_provider: "claude"
+  
+  # Phase 3: Evaluation (評価用LLM)
+  evaluator:
+    model: "gpt-5"
+    api_provider: "openai"
+    max_iterations: 3  # Maximum number of evaluation-improvement cycles
+    early_exit_threshold: 8  # Exit if all scores >= this value (0-10 scale)
+
+  # Phase 4: Whole Article Evaluation (記事全体評価用LLM)
+  whole_article_evaluator:
+    model: "gpt-5"
+    api_provider: "openai"
+    max_iterations: 2  # Maximum number of whole article evaluation-improvement cycles
+    early_exit_threshold: 8  # Exit if all scores >= this value (0-10 scale)
+
+  # Phase 5: Three Point Summary (3点要約用LLM)
+  three_point_summary:
+    model: "gpt-4o"
+    api_provider: "openai"
+
+  # Phase 6: Heading Generation (見出し生成用LLM)
+  heading_generator:
+    model: "claude-sonnet-4-20250514"
+    api_provider: "claude"
+
+  # Phase 7: Title Generation (タイトル生成用LLM)
+  title_generator:
+    model: "claude-sonnet-4-20250514"
+    api_provider: "claude"
+
+# OpenAI/Azure OpenAI Configuration (default settings)
 openai:
-  model: "gpt-5"  # Default OpenAI model to use
-  api_provider: "openai"  # Options: "openai" or "azure"
+  model: "gpt-4o"  # Default OpenAI model to use
+  api_provider: "openai"  # Options: "openai", "azure", or "claude"
 
 # Azure OpenAI specific settings (when using azure provider)
 azure_openai:
   api_version: "2025-01-01-preview"
   deployment_name: "gpt-4.1-nano"
+
+# Anthropic Claude specific settings (when using claude provider)
+claude:
+  model: "claude-sonnet-4-20250514"  # Default Claude model to use
+  max_tokens: 4096  # Maximum tokens for Claude responses
 
 # Google Sheets Configuration
 sheets:
@@ -18,7 +64,7 @@ sheets:
   spreadsheet_name: "AI-SCHOLAR運用管理システム"
   worksheet_name: "LLM-Papers"
   
-  # Column indices (1-based indexing as used by gspread)
+  # 「列名」: 「列インデックス」（1始まり）
   columns:
     title: 2
     url: 3
@@ -26,6 +72,8 @@ sheets:
     detailed_summary: 6
     three_point_summary: 7
     status: 8
+    heading_names: 9
+    article_title: 10
   
   # Row configuration
   header_row_count: 1
@@ -45,16 +93,36 @@ processing:
   # API call settings
   api_settings:
     retry_attempts: 3
-    retry_min_wait: 4
+    retry_min_wait: 1  # Faster initial retry (reduced from 4)
     retry_max_wait: 10
 
 # File and directory paths (relative to project root)
 paths:
   # Directory to save downloaded papers
   content_dir: "content"
-  
+
   # Prompts directory
   prompts_dir: "prompts"
-  
+
   # Figures directory for extracted images
   figures_dir: "figures"
+
+  # Log directory for LLM outputs
+  log_dir: "log"
+
+# LLM Logging Configuration
+llm_logging:
+  # Enable/disable LLM input-output logging
+  enabled: true
+
+  # Save detailed prompts (system and user prompts)
+  save_prompts: true
+
+  # Save LLM responses
+  save_responses: true
+
+  # Save token usage information
+  save_tokens: true
+
+  # Save execution time
+  save_execution_time: true
