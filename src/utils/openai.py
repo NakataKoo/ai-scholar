@@ -4,10 +4,12 @@ This module provides functions for interacting with OpenAI and Azure OpenAI APIs
 including paper summarization and rate limiting functionality.
 """
 
+import json
 import logging
 import os
 import time
 
+from anthropic import Anthropic
 from dotenv import load_dotenv
 from openai import AzureOpenAI, OpenAI
 from pydantic import BaseModel
@@ -38,8 +40,15 @@ AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 # OpenAI API
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# Anthropic Claude API
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
 # MODEL - now from config
 OPENAI_MODEL = config["openai"]["model"]
+
+# Claude MODEL - from config
+CLAUDE_MODEL = config["claude"]["model"]
+CLAUDE_MAX_TOKENS = config["claude"]["max_tokens"]
 
 # Select API - now from config
 SELECT_API = config["openai"]["api_provider"]
@@ -70,14 +79,14 @@ class EvaluationResponse(BaseModel):
 
 
 def _get_openai_client(api_provider: str = None):
-    """Initialize and return OpenAI client based on provider.
+    """Initialize and return LLM client based on provider.
 
     Args:
-        api_provider (str, optional): API provider ("openai" or "azure").
+        api_provider (str, optional): API provider ("openai", "azure", or "claude").
                                      If None, uses default from config.
 
     Returns:
-        OpenAI or AzureOpenAI: Configured OpenAI client
+        OpenAI, AzureOpenAI, or Anthropic: Configured LLM client
 
     Raises:
         ValueError: If required credentials are not found
@@ -95,6 +104,10 @@ def _get_openai_client(api_provider: str = None):
         return AzureOpenAI(
             azure_endpoint=AZURE_OPENAI_ENDPOINT, api_version=AZURE_OPENAI_API_VERSION, api_key=AZURE_OPENAI_API_KEY
         )
+    if provider == "claude":
+        if not ANTHROPIC_API_KEY:
+            raise ValueError("Anthropic API key not found in environment variables")
+        return Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 class RateLimiter:
@@ -126,7 +139,7 @@ def call_openai_with_images(
     section: str = None,
     log_suffix: str = "",
 ) -> str:
-    """Call OpenAI API with images (without Structured Output).
+    """Call LLM API with images (without Structured Output).
 
     Args:
         system_prompt (str): System prompt for the AI
@@ -146,66 +159,129 @@ def call_openai_with_images(
         Exception: If API call fails
     """
     # Initialize client and rate limiter
-    openai_client = _get_openai_client(api_provider)
+    llm_client = _get_openai_client(api_provider)
     rate_limiter = RateLimiter()
-    used_model = model or OPENAI_MODEL
     used_api_provider = api_provider or SELECT_API
+
+    # Determine model based on provider
+    if used_api_provider == "claude":
+        used_model = model or CLAUDE_MODEL
+    else:
+        used_model = model or OPENAI_MODEL
 
     # rate_limiter.wait_if_needed()
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_prompt},
-            ]
-            + [
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}", "detail": image_detail}}
-                for img in pdf_images
-            ],
-        },
-    ]
-
     try:
         start_time = time.time()
-        response = openai_client.chat.completions.create(model=used_model, messages=messages)
-        execution_time = time.time() - start_time
 
-        logger.info(
-            f"API call successful. Tokens used - "
-            f"Input: {response.usage.prompt_tokens}, "
-            f"Output: {response.usage.completion_tokens}, "
-            f"Total: {response.usage.total_tokens}"
-        )
+        # Claude API has different message format
+        if used_api_provider == "claude":
+            # Build content array for Claude
+            content = [{"type": "text", "text": user_prompt}]
 
-        # Get response content
-        response_content = response.choices[0].message.content
+            # Add images to content
+            for img in pdf_images:
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": img,
+                    },
+                })
 
-        # Log LLM call if role and section are provided
-        if llm_role and section:
-            tokens = {
-                "input": response.usage.prompt_tokens,
-                "output": response.usage.completion_tokens,
-                "total": response.usage.total_tokens,
-            }
-            log_llm_call(
-                llm_role=llm_role,
-                section=section,
+            # Claude API call
+            response = llm_client.messages.create(
                 model=used_model,
-                api_provider=used_api_provider,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response=response_content,
-                tokens=tokens,
-                execution_time=execution_time,
-                suffix=log_suffix,
+                max_tokens=CLAUDE_MAX_TOKENS,
+                system=system_prompt,
+                messages=[{"role": "user", "content": content}]
             )
+
+            execution_time = time.time() - start_time
+
+            logger.info(
+                f"Claude API call successful. Tokens used - "
+                f"Input: {response.usage.input_tokens}, "
+                f"Output: {response.usage.output_tokens}"
+            )
+
+            # Get response content
+            response_content = response.content[0].text
+
+            # Log LLM call if role and section are provided
+            if llm_role and section:
+                tokens = {
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens,
+                    "total": response.usage.input_tokens + response.usage.output_tokens,
+                }
+                log_llm_call(
+                    llm_role=llm_role,
+                    section=section,
+                    model=used_model,
+                    api_provider=used_api_provider,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    response=response_content,
+                    tokens=tokens,
+                    execution_time=execution_time,
+                    suffix=log_suffix,
+                )
+
+        else:
+            # OpenAI/Azure API call
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_prompt},
+                    ]
+                    + [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}", "detail": image_detail}}
+                        for img in pdf_images
+                    ],
+                },
+            ]
+
+            response = llm_client.chat.completions.create(model=used_model, messages=messages)
+            execution_time = time.time() - start_time
+
+            logger.info(
+                f"API call successful. Tokens used - "
+                f"Input: {response.usage.prompt_tokens}, "
+                f"Output: {response.usage.completion_tokens}, "
+                f"Total: {response.usage.total_tokens}"
+            )
+
+            # Get response content
+            response_content = response.choices[0].message.content
+
+            # Log LLM call if role and section are provided
+            if llm_role and section:
+                tokens = {
+                    "input": response.usage.prompt_tokens,
+                    "output": response.usage.completion_tokens,
+                    "total": response.usage.total_tokens,
+                }
+                log_llm_call(
+                    llm_role=llm_role,
+                    section=section,
+                    model=used_model,
+                    api_provider=used_api_provider,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    response=response_content,
+                    tokens=tokens,
+                    execution_time=execution_time,
+                    suffix=log_suffix,
+                )
 
         return response_content
 
     except Exception as e:
-        logger.error(f"Error in OpenAI API call: {e!s}")
+        logger.error(f"Error in LLM API call: {e!s}")
         raise
 
 
@@ -219,7 +295,7 @@ def call_openai_text_only(
     section: str = None,
     log_suffix: str = "",
 ) -> BaseModel:
-    """Call OpenAI API with text-only input (with Structured Output).
+    """Call LLM API with text-only input (with Structured Output).
 
     Args:
         system_prompt (str): System prompt for the AI
@@ -239,59 +315,142 @@ def call_openai_text_only(
         Exception: If API call fails
     """
     # Initialize client and rate limiter
-    openai_client = _get_openai_client(api_provider)
+    llm_client = _get_openai_client(api_provider)
     rate_limiter = RateLimiter()
-    used_model = model or OPENAI_MODEL
     used_api_provider = api_provider or SELECT_API
+
+    # Determine model based on provider
+    if used_api_provider == "claude":
+        used_model = model or CLAUDE_MODEL
+    else:
+        used_model = model or OPENAI_MODEL
 
     # rate_limiter.wait_if_needed()
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-
     try:
         start_time = time.time()
-        response = openai_client.beta.chat.completions.parse(
-            model=used_model, messages=messages, response_format=response_format
-        )
-        execution_time = time.time() - start_time
 
-        logger.info(
-            f"API call successful. Tokens used - "
-            f"Input: {response.usage.prompt_tokens}, "
-            f"Output: {response.usage.completion_tokens}, "
-            f"Total: {response.usage.total_tokens}"
-        )
+        # Claude API requires JSON schema in prompt for structured output
+        if used_api_provider == "claude":
+            # Get JSON schema from Pydantic model
+            schema = response_format.model_json_schema()
 
-        # Get parsed response
-        parsed_response = response.choices[0].message.parsed
+            # Build enhanced prompt with JSON schema
+            enhanced_user_prompt = f"""{user_prompt}
 
-        # Log LLM call if role and section are provided
-        if llm_role and section:
-            tokens = {
-                "input": response.usage.prompt_tokens,
-                "output": response.usage.completion_tokens,
-                "total": response.usage.total_tokens,
-            }
-            log_llm_call(
-                llm_role=llm_role,
-                section=section,
+Please respond with a valid JSON object that matches the following schema:
+
+{json.dumps(schema, indent=2)}
+
+Important: Return ONLY the JSON object, with no additional text or explanation."""
+
+            # Claude API call
+            response = llm_client.messages.create(
                 model=used_model,
-                api_provider=used_api_provider,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response=parsed_response,
-                tokens=tokens,
-                execution_time=execution_time,
-                suffix=log_suffix,
+                max_tokens=CLAUDE_MAX_TOKENS,
+                system=system_prompt,
+                messages=[{"role": "user", "content": enhanced_user_prompt}]
             )
+
+            execution_time = time.time() - start_time
+
+            logger.info(
+                f"Claude API call successful. Tokens used - "
+                f"Input: {response.usage.input_tokens}, "
+                f"Output: {response.usage.output_tokens}"
+            )
+
+            # Get response content and parse JSON
+            response_text = response.content[0].text
+
+            # Try to parse JSON from response
+            try:
+                # Handle potential markdown code blocks
+                if "```json" in response_text:
+                    # Extract JSON from markdown code block
+                    json_start = response_text.find("```json") + 7
+                    json_end = response_text.rfind("```")
+                    response_text = response_text[json_start:json_end].strip()
+                elif "```" in response_text:
+                    # Extract from generic code block
+                    json_start = response_text.find("```") + 3
+                    json_end = response_text.rfind("```")
+                    response_text = response_text[json_start:json_end].strip()
+
+                # Parse JSON and validate with Pydantic
+                response_dict = json.loads(response_text)
+                parsed_response = response_format(**response_dict)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.error(f"Failed to parse Claude response as JSON: {e}")
+                logger.error(f"Response text: {response_text}")
+                raise
+
+            # Log LLM call if role and section are provided
+            if llm_role and section:
+                tokens = {
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens,
+                    "total": response.usage.input_tokens + response.usage.output_tokens,
+                }
+                log_llm_call(
+                    llm_role=llm_role,
+                    section=section,
+                    model=used_model,
+                    api_provider=used_api_provider,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    response=parsed_response,
+                    tokens=tokens,
+                    execution_time=execution_time,
+                    suffix=log_suffix,
+                )
+
+        else:
+            # OpenAI/Azure API call with native structured output
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            response = llm_client.beta.chat.completions.parse(
+                model=used_model, messages=messages, response_format=response_format
+            )
+            execution_time = time.time() - start_time
+
+            logger.info(
+                f"API call successful. Tokens used - "
+                f"Input: {response.usage.prompt_tokens}, "
+                f"Output: {response.usage.completion_tokens}, "
+                f"Total: {response.usage.total_tokens}"
+            )
+
+            # Get parsed response
+            parsed_response = response.choices[0].message.parsed
+
+            # Log LLM call if role and section are provided
+            if llm_role and section:
+                tokens = {
+                    "input": response.usage.prompt_tokens,
+                    "output": response.usage.completion_tokens,
+                    "total": response.usage.total_tokens,
+                }
+                log_llm_call(
+                    llm_role=llm_role,
+                    section=section,
+                    model=used_model,
+                    api_provider=used_api_provider,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    response=parsed_response,
+                    tokens=tokens,
+                    execution_time=execution_time,
+                    suffix=log_suffix,
+                )
 
         return parsed_response
 
     except Exception as e:
-        logger.error(f"Error in OpenAI API call: {e!s}")
+        logger.error(f"Error in LLM API call: {e!s}")
         raise
 
 

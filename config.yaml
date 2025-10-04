@@ -11,8 +11,8 @@ workflow:
   
   # Phase 2: Article Writing (記事書く係のLLM)
   article_writer:
-    model: "gpt-4o"
-    api_provider: "openai"
+    model: "claude-sonnet-4-20250514"
+    api_provider: "claude"
   
   # Phase 3: Evaluation (評価用LLM)
   evaluator:
@@ -35,18 +35,23 @@ workflow:
 
   # Phase 6: Heading Generation (見出し生成用LLM)
   heading_generator:
-    model: "gpt-4o"
-    api_provider: "openai"
+    model: "claude-sonnet-4-20250514"
+    api_provider: "claude"
 
 # OpenAI/Azure OpenAI Configuration (default settings)
 openai:
   model: "gpt-4o"  # Default OpenAI model to use
-  api_provider: "openai"  # Options: "openai" or "azure"
+  api_provider: "openai"  # Options: "openai", "azure", or "claude"
 
 # Azure OpenAI specific settings (when using azure provider)
 azure_openai:
   api_version: "2025-01-01-preview"
   deployment_name: "gpt-4.1-nano"
+
+# Anthropic Claude specific settings (when using claude provider)
+claude:
+  model: "claude-sonnet-4-20250514"  # Default Claude model to use
+  max_tokens: 4096  # Maximum tokens for Claude responses
 
 # Google Sheets Configuration
 sheets:

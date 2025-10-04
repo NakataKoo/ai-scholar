@@ -13,9 +13,9 @@ from src.utils.llm_logger import initialize_logger, reset_logger
 from src.utils.openai import generate_three_point_summary
 from src.core.workflow import generate_detailed_summary_with_workflow
 from src.utils.sheet_helper import (
+    get_all_rows_batch,
     get_google_sheets_client,
     mark_error_status,
-    should_process_row,
     update_processing_results,
 )
 
@@ -78,22 +78,31 @@ def process_single_paper(sheet, row_index: int, url: str, title: str):
         mark_error_status(sheet, row_index, STATUS_COLUMN)
 
 
-def process_all_papers(sheet, urls: list):
-    """Process all papers in the spreadsheet.
+def process_all_papers(sheet):
+    """Process all papers in the spreadsheet using batch operations.
 
     Args:
         sheet: Google Sheets worksheet object
-        urls (list): List of URLs from the spreadsheet
     """
-    for i, url in enumerate(urls, start=2):
+    # Batch read all rows at once to minimize API calls
+    all_rows = get_all_rows_batch(sheet, header_row_count=HEADER_ROW_COUNT)
+
+    for i, row in enumerate(all_rows, start=HEADER_ROW_COUNT + 1):
+        # Ensure row has enough columns
+        if len(row) < max(URL_COLUMN, TITLE_COLUMN, STATUS_COLUMN):
+            continue
+
+        url = row[URL_COLUMN - 1] if URL_COLUMN <= len(row) else ""
+        title = row[TITLE_COLUMN - 1] if TITLE_COLUMN <= len(row) else ""
+        status = row[STATUS_COLUMN - 1] if STATUS_COLUMN <= len(row) else ""
+
         if not url:
             continue
 
-        if should_process_row(sheet, i, STATUS_COLUMN):
-            title = sheet.cell(i, TITLE_COLUMN).value
+        # Check status in memory (no API calls)
+        if status != "完了" and status != "エラー":
             process_single_paper(sheet, i, url, title)
         else:
-            status = sheet.cell(i, STATUS_COLUMN).value
             logger.info("Skipping row %s: status is '%s'", i, status)
 
 
@@ -149,12 +158,9 @@ def main():
         spreadsheet = client.open(config["sheets"]["spreadsheet_name"])
         sheet = spreadsheet.worksheet(config["sheets"]["worksheet_name"])
 
-        # Get URLs
-        urls = sheet.col_values(URL_COLUMN)[HEADER_ROW_COUNT:]  # Get data from A2 onwards using [1:]
-        logger.info(f"Found {len(urls)} URLs to process")
-
-        # Process all papers
-        process_all_papers(sheet, urls)
+        # Process all papers using batch operations
+        logger.info("Processing papers with batch operations to avoid rate limits")
+        process_all_papers(sheet)
 
         logger.info("Completed")
 
