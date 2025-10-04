@@ -849,3 +849,46 @@ def generate_section_heading(section: str, section_content: str) -> str:
     except Exception as e:
         logger.error(f"Error generating heading for section {section}: {e!s}")
         raise
+
+
+
+@retry(
+    stop=stop_after_attempt(config["processing"]["api_settings"]["retry_attempts"]),
+    wait=wait_exponential(
+        multiplier=1,
+        min=config["processing"]["api_settings"]["retry_min_wait"],
+        max=config["processing"]["api_settings"]["retry_max_wait"],
+    ),
+)
+def generate_article_title(article_content: str) -> str:
+    """Generate title for the article based on the full content.
+
+    Args:
+        article_content (str): Full article content to generate title for
+
+    Returns:
+        str: Generated title text
+    """
+    try:
+        from src.utils.prompt_loader import get_title_generator_system_prompt, get_title_generator_user_prompt
+
+        logger.info("Generating article title")
+
+        workflow_config = config.get("workflow", {})
+        title_config = workflow_config.get("title_generator", {})
+        model = title_config.get("model", OPENAI_MODEL)
+        api_provider = title_config.get("api_provider", SELECT_API)
+
+        response = call_openai_text_only(
+            system_prompt=get_title_generator_system_prompt(),
+            user_prompt=get_title_generator_user_prompt(article_content),
+            model=model,
+            api_provider=api_provider,
+            response_format=TextResponse,
+            llm_role="title_generator",
+            section="article_title",
+        )
+        return response.content
+    except Exception as e:
+        logger.error(f"Error generating article title: {e!s}")
+        raise

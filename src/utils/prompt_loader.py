@@ -205,3 +205,26 @@ def get_heading_generator_user_prompt(section: str, section_content: str) -> str
     """
     template = load_prompt("heading_generator_user.txt")
     return template.format(section=section, section_content=section_content)
+
+
+
+def get_title_generator_system_prompt() -> str:
+    """Get system prompt for title generation phase.
+
+    Returns:
+        str: System prompt text for title generation
+    """
+    return load_prompt("title_generator_system.txt")
+
+
+def get_title_generator_user_prompt(article_content: str) -> str:
+    """Generate title generator user prompt.
+
+    Args:
+        article_content (str): Full article content to generate title for
+
+    Returns:
+        str: Formatted prompt text
+    """
+    template = load_prompt("title_generator_user.txt")
+    return template.format(article_content=article_content)

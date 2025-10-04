@@ -38,6 +38,11 @@ workflow:
     model: "claude-sonnet-4-20250514"
     api_provider: "claude"
 
+  # Phase 7: Title Generation (タイトル生成用LLM)
+  title_generator:
+    model: "claude-sonnet-4-20250514"
+    api_provider: "claude"
+
 # OpenAI/Azure OpenAI Configuration (default settings)
 openai:
   model: "gpt-4o"  # Default OpenAI model to use
@@ -68,6 +73,7 @@ sheets:
     three_point_summary: 7
     status: 8
     heading_names: 9
+    article_title: 10
   
   # Row configuration
   header_row_count: 1

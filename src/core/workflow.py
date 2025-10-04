@@ -6,6 +6,9 @@ and Evaluator-Optimizer patterns:
 Phase 1: Paper Analysis (論文読む係のLLM)
 Phase 2: Article Generation (記事書く係のLLM)
 Phase 3: Evaluation & Improvement Loop (評価用LLM + Evaluator-Optimizer)
+Phase 4: Whole Article Evaluation & Improvement (記事全体評価用LLM)
+Phase 5: Section Heading Generation (見出し生成用LLM)
+Phase 6: Article Title Generation (タイトル生成用LLM)
 """
 
 import logging
@@ -173,9 +176,10 @@ def generate_detailed_summary_with_workflow(pdf_images: list, sections: list) ->
         sections (list): List of section names to process
 
     Returns:
-        tuple: (final_summary, section_headings)
+        tuple: (final_summary, section_headings, article_title)
                - final_summary: Complete detailed summary with all sections
                - section_headings: Dictionary mapping section names to generated headings
+               - article_title: Generated title for the article
     """
     logger.info("Starting detailed summary generation with AI workflow")
     logger.info("Sections to process: %s", sections)
@@ -240,5 +244,19 @@ def generate_detailed_summary_with_workflow(pdf_images: list, sections: list) ->
     logger.info("Heading generation completed")
     logger.info("=" * 60)
 
+    # Phase 6: Article Title Generation
+    logger.info("=" * 60)
+    logger.info("Phase 6: Article Title Generation")
+    logger.info("=" * 60)
+
+    from src.utils.openai import generate_article_title
+
+    article_title = generate_article_title(final_summary)
+    logger.info("Generated article title: %s", article_title)
+
+    logger.info("=" * 60)
+    logger.info("Title generation completed")
+    logger.info("=" * 60)
+
     logger.info("Detailed summary generation completed")
-    return final_summary, section_headings
+    return final_summary, section_headings, article_title

@@ -99,6 +99,7 @@ def update_processing_results(
     detailed_summary: str,
     three_point_summary: str,
     heading_names: str,
+    article_title: str,
     processing_date: str,
     columns: dict,
 ):
@@ -110,9 +111,10 @@ def update_processing_results(
         detailed_summary (str): Detailed summary text
         three_point_summary (str): Three-point summary text
         heading_names (str): Section heading names (newline-separated)
+        article_title (str): Generated article title
         processing_date (str): Processing date string
         columns (dict): Dictionary containing column indices with keys:
-            'processing_date', 'detailed_summary', 'three_point_summary', 'heading_names', 'status'
+            'processing_date', 'detailed_summary', 'three_point_summary', 'heading_names', 'article_title', 'status'
     """
     # Prepare batch update data
     cell_updates = [
@@ -120,6 +122,7 @@ def update_processing_results(
         {"range": f"{_get_column_letter(columns['detailed_summary'])}{row_index}", "values": [[detailed_summary]]},
         {"range": f"{_get_column_letter(columns['three_point_summary'])}{row_index}", "values": [[three_point_summary]]},
         {"range": f"{_get_column_letter(columns['heading_names'])}{row_index}", "values": [[heading_names]]},
+        {"range": f"{_get_column_letter(columns['article_title'])}{row_index}", "values": [[article_title]]},
         {"range": f"{_get_column_letter(columns['status'])}{row_index}", "values": [["完了"]]},
     ]
 

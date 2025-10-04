@@ -44,6 +44,7 @@ DETAILED_SUMMARY_COLUMN = config["sheets"]["columns"]["detailed_summary"]
 THREE_POINT_SUMMARY_COLUMN = config["sheets"]["columns"]["three_point_summary"]
 STATUS_COLUMN = config["sheets"]["columns"]["status"]
 HEADING_NAMES_COLUMN = config["sheets"]["columns"]["heading_names"]
+ARTICLE_TITLE_COLUMN = config["sheets"]["columns"]["article_title"]
 
 # Header row count - now from config
 HEADER_ROW_COUNT = config["sheets"]["header_row_count"]
@@ -61,15 +62,16 @@ def process_single_paper(sheet, row_index: int, url: str, title: str):
     try:
         logger.info("Processing row %s: %s", row_index, title)
 
-        detailed_summary, three_point_summary, heading_names = paper_reader(url, title)
+        detailed_summary, three_point_summary, heading_names, article_title = paper_reader(url, title)
         columns = {
             "processing_date": PROCESSING_DATE_COLUMN,
             "detailed_summary": DETAILED_SUMMARY_COLUMN,
             "three_point_summary": THREE_POINT_SUMMARY_COLUMN,
             "heading_names": HEADING_NAMES_COLUMN,
+            "article_title": ARTICLE_TITLE_COLUMN,
             "status": STATUS_COLUMN,
         }
-        update_processing_results(sheet, row_index, detailed_summary, three_point_summary, heading_names, PROCESSING_DATE, columns)
+        update_processing_results(sheet, row_index, detailed_summary, three_point_summary, heading_names, article_title, PROCESSING_DATE, columns)
 
         logger.info("Successfully processed row %s", row_index)
 
@@ -114,7 +116,7 @@ def paper_reader(arxiv_url: str, title: str) -> tuple:
         title (str): Title of the paper
 
     Returns:
-        tuple: (detailed_summary, three_point_summary, heading_names)
+        tuple: (detailed_summary, three_point_summary, heading_names, article_title)
     """
     try:
         # Reset and initialize LLM logger for this paper
@@ -130,7 +132,7 @@ def paper_reader(arxiv_url: str, title: str) -> tuple:
         # Generate paper explanation using AI workflow
         # Workflow: Prompt-Chaining (Paper Analysis → Article Writing → Evaluation & Improvement)
         logger.info("Starting AI workflow for detailed summary generation")
-        detailed_summary, section_headings = generate_detailed_summary_with_workflow(pdf_images, SECTIONS)
+        detailed_summary, section_headings, article_title = generate_detailed_summary_with_workflow(pdf_images, SECTIONS)
 
         logger.info("Generating 3-point summary")
         three_point_summary = generate_three_point_summary(pdf_images)
@@ -139,7 +141,7 @@ def paper_reader(arxiv_url: str, title: str) -> tuple:
         heading_names = "\n".join([section_headings[section] for section in SECTIONS])
 
         logger.info("Successfully processed paper: %s", title)
-        return detailed_summary, three_point_summary, heading_names
+        return detailed_summary, three_point_summary, heading_names, article_title
 
     except Exception as e:
         logger.error(f"Error processing paper '{title}': {e!s}")
