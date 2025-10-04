@@ -335,14 +335,25 @@ def call_openai_text_only(
             # Get JSON schema from Pydantic model
             schema = response_format.model_json_schema()
 
-            # Build enhanced prompt with JSON schema
+            # Build enhanced prompt with JSON schema and strict formatting rules
             enhanced_user_prompt = f"""{user_prompt}
 
 Please respond with a valid JSON object that matches the following schema:
 
 {json.dumps(schema, indent=2)}
 
-Important: Return ONLY the JSON object, with no additional text or explanation."""
+IMPORTANT JSON FORMATTING RULES:
+1. Return ONLY a valid JSON object, with no additional text, explanation, or markdown code blocks
+2. Properly escape all special characters in string values:
+   - Use \\" for double quotes inside strings
+   - Use \\n for newlines
+   - Use \\\\ for backslashes
+3. Ensure all string values are properly enclosed in double quotes
+4. Do not include any text before or after the JSON object
+5. The response must be parseable by standard JSON parsers
+
+Example format:
+{{"content": "This is a properly escaped string with \\"quotes\\" and newlines.\\n\\nThis continues on a new paragraph."}}"""
 
             # Claude API call
             response = llm_client.messages.create(
@@ -363,27 +374,79 @@ Important: Return ONLY the JSON object, with no additional text or explanation."
             # Get response content and parse JSON
             response_text = response.content[0].text
 
-            # Try to parse JSON from response
-            try:
-                # Handle potential markdown code blocks
-                if "```json" in response_text:
-                    # Extract JSON from markdown code block
-                    json_start = response_text.find("```json") + 7
-                    json_end = response_text.rfind("```")
-                    response_text = response_text[json_start:json_end].strip()
-                elif "```" in response_text:
-                    # Extract from generic code block
-                    json_start = response_text.find("```") + 3
-                    json_end = response_text.rfind("```")
-                    response_text = response_text[json_start:json_end].strip()
+            # Try to parse JSON from response with improved error handling
+            parsed_response = None
+            parse_attempts = 0
+            max_attempts = 3
 
-                # Parse JSON and validate with Pydantic
-                response_dict = json.loads(response_text)
-                parsed_response = response_format(**response_dict)
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.error(f"Failed to parse Claude response as JSON: {e}")
-                logger.error(f"Response text: {response_text}")
-                raise
+            while parsed_response is None and parse_attempts < max_attempts:
+                parse_attempts += 1
+                try:
+                    # Handle potential markdown code blocks
+                    clean_text = response_text
+                    if "```json" in clean_text:
+                        # Extract JSON from markdown code block
+                        json_start = clean_text.find("```json") + 7
+                        json_end = clean_text.rfind("```")
+                        clean_text = clean_text[json_start:json_end].strip()
+                    elif "```" in clean_text:
+                        # Extract from generic code block
+                        json_start = clean_text.find("```") + 3
+                        json_end = clean_text.rfind("```")
+                        clean_text = clean_text[json_start:json_end].strip()
+
+                    # Attempt 1: Direct JSON parsing
+                    if parse_attempts == 1:
+                        response_dict = json.loads(clean_text)
+                        parsed_response = response_format(**response_dict)
+
+                    # Attempt 2: Try to fix common JSON issues
+                    elif parse_attempts == 2:
+                        # Remove any leading/trailing whitespace and non-JSON characters
+                        clean_text = clean_text.strip()
+                        # Find the first { and last }
+                        start_idx = clean_text.find('{')
+                        end_idx = clean_text.rfind('}')
+                        if start_idx != -1 and end_idx != -1:
+                            clean_text = clean_text[start_idx:end_idx+1]
+                        response_dict = json.loads(clean_text)
+                        parsed_response = response_format(**response_dict)
+
+                    # Attempt 3: Fallback - extract content field manually
+                    elif parse_attempts == 3:
+                        logger.warning("Attempting manual content extraction from Claude response")
+                        # For TextResponse format, extract content manually
+                        if response_format == TextResponse:
+                            # Try to extract content field value using regex
+                            import re
+                            content_match = re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', clean_text, re.DOTALL)
+                            if content_match:
+                                content = content_match.group(1)
+                                # Unescape the content
+                                content = content.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+                                parsed_response = TextResponse(content=content)
+                            else:
+                                # Last resort: use the entire text as content
+                                logger.warning("Could not extract content field, using entire response as content")
+                                parsed_response = TextResponse(content=response_text)
+                        else:
+                            # For other response formats, try lenient parsing
+                            response_dict = json.loads(clean_text)
+                            parsed_response = response_format(**response_dict)
+
+                except (json.JSONDecodeError, ValueError) as e:
+                    if parse_attempts >= max_attempts:
+                        logger.error(f"Failed to parse Claude response as JSON after {max_attempts} attempts: {e}")
+                        logger.error(f"Response text (first 500 chars): {response_text[:500]}...")
+                        # For TextResponse, provide a fallback
+                        if response_format == TextResponse:
+                            logger.warning("Using fallback: returning entire response as content")
+                            parsed_response = TextResponse(content=response_text)
+                        else:
+                            raise
+                    else:
+                        logger.warning(f"Parse attempt {parse_attempts} failed: {e}, retrying...")
+                        continue
 
             # Log LLM call if role and section are provided
             if llm_role and section:
