@@ -19,6 +19,7 @@ workflow:
     model: "gpt-4o"
     api_provider: "openai"
     max_iterations: 3  # Maximum number of evaluation-improvement cycles
+    early_exit_threshold: 8  # Exit if all scores >= this value (0-10 scale)
 
 # OpenAI/Azure OpenAI Configuration (default settings)
 openai:
@@ -63,16 +64,36 @@ processing:
   # API call settings
   api_settings:
     retry_attempts: 3
-    retry_min_wait: 4
+    retry_min_wait: 1  # Faster initial retry (reduced from 4)
     retry_max_wait: 10
 
 # File and directory paths (relative to project root)
 paths:
   # Directory to save downloaded papers
   content_dir: "content"
-  
+
   # Prompts directory
   prompts_dir: "prompts"
-  
+
   # Figures directory for extracted images
   figures_dir: "figures"
+
+  # Log directory for LLM outputs
+  log_dir: "log"
+
+# LLM Logging Configuration
+llm_logging:
+  # Enable/disable LLM input-output logging
+  enabled: true
+
+  # Save detailed prompts (system and user prompts)
+  save_prompts: true
+
+  # Save LLM responses
+  save_responses: true
+
+  # Save token usage information
+  save_tokens: true
+
+  # Save execution time
+  save_execution_time: true

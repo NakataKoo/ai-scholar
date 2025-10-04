@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))  # Adjust path to import utils
 from src.utils.config import load_config
 from src.utils.helper import download_paper, pdf_to_base64
+from src.utils.llm_logger import initialize_logger, reset_logger
 from src.utils.openai import generate_three_point_summary
 from src.core.workflow import generate_detailed_summary_with_workflow
 from src.utils.sheet_helper import (
@@ -105,6 +106,10 @@ def paper_reader(arxiv_url: str, title: str) -> tuple:
         tuple: (detailed_summary, section_summary)
     """
     try:
+        # Reset and initialize LLM logger for this paper
+        reset_logger()
+        initialize_logger(paper_id=title)
+
         save_dir_name = config["paths"]["content_dir"] + "/" + title
 
         logger.info("Starting paper processing: %s", title)

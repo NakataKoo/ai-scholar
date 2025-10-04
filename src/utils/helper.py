@@ -38,13 +38,13 @@ def pdf_to_base64(pdf_path: str) -> list:
     Returns:
         list: List of base64-encoded images
     """
-    images = pdf2image.convert_from_path(pdf_path)
+    images = pdf2image.convert_from_path(pdf_path, dpi=150)
 
     base64_images = []
 
     for image in images:
         buffered = BytesIO()
-        image.save(buffered, format="jpeg")
+        image.save(buffered, format="jpeg", quality=85, optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
         base64_images.append(img_str)
 

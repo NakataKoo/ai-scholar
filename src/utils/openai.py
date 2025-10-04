@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.utils.config import load_config
+from src.utils.llm_logger import log_llm_call
 from src.utils.prompt_loader import (
     get_detailed_summary_prompt,
     get_system_prompt,
@@ -120,9 +121,12 @@ def call_openai_with_images(
     pdf_images: list,
     model: str = None,
     api_provider: str = None,
-    response_format: type[BaseModel] = TextResponse,
-) -> BaseModel:
-    """Call OpenAI API with images.
+    image_detail: str = "auto",
+    llm_role: str = None,
+    section: str = None,
+    log_suffix: str = "",
+) -> str:
+    """Call OpenAI API with images (without Structured Output).
 
     Args:
         system_prompt (str): System prompt for the AI
@@ -130,8 +134,103 @@ def call_openai_with_images(
         pdf_images (list): List of base64-encoded images
         model (str, optional): Model to use. If None, uses default from config.
         api_provider (str, optional): API provider. If None, uses default from config.
+        image_detail (str, optional): Image detail level. Defaults to "auto".
+        llm_role (str, optional): LLM role for logging (paper_analyzer, article_writer, evaluator)
+        section (str, optional): Section name for logging
+        log_suffix (str, optional): Additional suffix for log filename
+
+    Returns:
+        str: Response text from the API
+
+    Raises:
+        Exception: If API call fails
+    """
+    # Initialize client and rate limiter
+    openai_client = _get_openai_client(api_provider)
+    rate_limiter = RateLimiter()
+    used_model = model or OPENAI_MODEL
+    used_api_provider = api_provider or SELECT_API
+
+    # rate_limiter.wait_if_needed()
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_prompt},
+            ]
+            + [
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}", "detail": image_detail}}
+                for img in pdf_images
+            ],
+        },
+    ]
+
+    try:
+        start_time = time.time()
+        response = openai_client.chat.completions.create(model=used_model, messages=messages)
+        execution_time = time.time() - start_time
+
+        logger.info(
+            f"API call successful. Tokens used - "
+            f"Input: {response.usage.prompt_tokens}, "
+            f"Output: {response.usage.completion_tokens}, "
+            f"Total: {response.usage.total_tokens}"
+        )
+
+        # Get response content
+        response_content = response.choices[0].message.content
+
+        # Log LLM call if role and section are provided
+        if llm_role and section:
+            tokens = {
+                "input": response.usage.prompt_tokens,
+                "output": response.usage.completion_tokens,
+                "total": response.usage.total_tokens,
+            }
+            log_llm_call(
+                llm_role=llm_role,
+                section=section,
+                model=used_model,
+                api_provider=used_api_provider,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response=response_content,
+                tokens=tokens,
+                execution_time=execution_time,
+                suffix=log_suffix,
+            )
+
+        return response_content
+
+    except Exception as e:
+        logger.error(f"Error in OpenAI API call: {e!s}")
+        raise
+
+
+def call_openai_text_only(
+    system_prompt: str,
+    user_prompt: str,
+    model: str = None,
+    api_provider: str = None,
+    response_format: type[BaseModel] = TextResponse,
+    llm_role: str = None,
+    section: str = None,
+    log_suffix: str = "",
+) -> BaseModel:
+    """Call OpenAI API with text-only input (with Structured Output).
+
+    Args:
+        system_prompt (str): System prompt for the AI
+        user_prompt (str): User prompt text
+        model (str, optional): Model to use. If None, uses default from config.
+        api_provider (str, optional): API provider. If None, uses default from config.
         response_format (type[BaseModel], optional): Pydantic model for structured output.
                                                      Defaults to TextResponse.
+        llm_role (str, optional): LLM role for logging (paper_analyzer, article_writer, evaluator)
+        section (str, optional): Section name for logging
+        log_suffix (str, optional): Additional suffix for log filename
 
     Returns:
         BaseModel: Parsed response as specified Pydantic model
@@ -143,35 +242,53 @@ def call_openai_with_images(
     openai_client = _get_openai_client(api_provider)
     rate_limiter = RateLimiter()
     used_model = model or OPENAI_MODEL
+    used_api_provider = api_provider or SELECT_API
 
     # rate_limiter.wait_if_needed()
 
     messages = [
-        {"role": "developer", "content": system_prompt},
-        {
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": user_prompt},
-            ]
-            + [
-                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{img}", "detail": "auto"}
-                for img in pdf_images
-            ],
-        },
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
     ]
 
     try:
-        response = openai_client.responses.parse(model=used_model, input=messages, text_format=response_format)
+        start_time = time.time()
+        response = openai_client.beta.chat.completions.parse(
+            model=used_model, messages=messages, response_format=response_format
+        )
+        execution_time = time.time() - start_time
 
         logger.info(
             f"API call successful. Tokens used - "
-            f"Input: {response.usage.input_tokens}, "
-            f"Output: {response.usage.output_tokens}, "
+            f"Input: {response.usage.prompt_tokens}, "
+            f"Output: {response.usage.completion_tokens}, "
             f"Total: {response.usage.total_tokens}"
         )
 
-        # Return structured response from parsed Pydantic model
-        return response.output_parsed
+        # Get parsed response
+        parsed_response = response.choices[0].message.parsed
+
+        # Log LLM call if role and section are provided
+        if llm_role and section:
+            tokens = {
+                "input": response.usage.prompt_tokens,
+                "output": response.usage.completion_tokens,
+                "total": response.usage.total_tokens,
+            }
+            log_llm_call(
+                llm_role=llm_role,
+                section=section,
+                model=used_model,
+                api_provider=used_api_provider,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response=parsed_response,
+                tokens=tokens,
+                execution_time=execution_time,
+                suffix=log_suffix,
+            )
+
+        return parsed_response
 
     except Exception as e:
         logger.error(f"Error in OpenAI API call: {e!s}")
@@ -204,7 +321,7 @@ def generate_detailed_section_summary(pdf_images: list, section: str, context: s
             user_prompt=get_detailed_summary_prompt(section, context),
             pdf_images=pdf_images,
         )
-        return response.content
+        return response
     except Exception as e:
         logger.error(f"Error generating summary for section {section}: {e!s}")
         raise
@@ -234,7 +351,7 @@ def generate_three_point_summary(pdf_images: list) -> str:
             user_prompt=get_three_point_summary_prompt(),
             pdf_images=pdf_images,
         )
-        return response.content
+        return response
     except Exception as e:
         logger.error(f"Error generating 3-point summary: {e!s}")
         raise
@@ -277,8 +394,11 @@ def analyze_paper_section(pdf_images: list, section: str) -> str:
             pdf_images=pdf_images,
             model=model,
             api_provider=api_provider,
+            image_detail="high",  # Analysis phase requires detailed image inspection
+            llm_role="paper_analyzer",
+            section=section,
         )
-        return response.content
+        return response
     except Exception as e:
         logger.error(f"Error analyzing paper for section {section}: {e!s}")
         raise
@@ -296,7 +416,7 @@ def generate_article_section(pdf_images: list, section: str, analysis: str, cont
     """Generate article text for a specific section.
 
     Args:
-        pdf_images (list): List of base64-encoded PDF page images
+        pdf_images (list): List of base64-encoded PDF page images (not used, kept for compatibility)
         section (str): Section name to write about
         analysis (str): Analysis result from paper analyzer
         context (str): Context from previous sections
@@ -314,12 +434,15 @@ def generate_article_section(pdf_images: list, section: str, analysis: str, cont
         model = writer_config.get("model", OPENAI_MODEL)
         api_provider = writer_config.get("api_provider", SELECT_API)
 
-        response = call_openai_with_images(
+        response = call_openai_text_only(
             system_prompt=get_article_writer_system_prompt(),
             user_prompt=get_article_writer_user_prompt(section, analysis, context),
-            pdf_images=pdf_images,
             model=model,
             api_provider=api_provider,
+            response_format=TextResponse,
+            llm_role="article_writer",
+            section=section,
+            log_suffix="initial",
         )
         return response.content
     except Exception as e:
@@ -327,13 +450,17 @@ def generate_article_section(pdf_images: list, section: str, analysis: str, cont
         raise
 
 
-def evaluate_article(pdf_images: list, article: str, analysis: str) -> EvaluationResponse:
+def evaluate_article(
+    pdf_images: list, article: str, analysis: str, section: str = "evaluation", iteration: int = 1
+) -> EvaluationResponse:
     """Evaluate article quality and provide feedback using Structured Output.
 
     Args:
-        pdf_images (list): List of base64-encoded PDF page images
+        pdf_images (list): List of base64-encoded PDF page images (not used, kept for compatibility)
         article (str): Article text to evaluate
         analysis (str): Analysis result from paper analyzer (for reference)
+        section (str, optional): Section name being evaluated. Defaults to "evaluation".
+        iteration (int, optional): Iteration number in evaluation loop. Defaults to 1.
 
     Returns:
         EvaluationResponse: Structured evaluation result with pass/fail, feedback, and scores
@@ -348,13 +475,15 @@ def evaluate_article(pdf_images: list, article: str, analysis: str) -> Evaluatio
         model = evaluator_config.get("model", OPENAI_MODEL)
         api_provider = evaluator_config.get("api_provider", SELECT_API)
 
-        evaluation = call_openai_with_images(
+        evaluation = call_openai_text_only(
             system_prompt=get_evaluator_system_prompt(),
             user_prompt=get_evaluator_user_prompt(article, analysis),
-            pdf_images=pdf_images,
             model=model,
             api_provider=api_provider,
             response_format=EvaluationResponse,
+            llm_role="evaluator",
+            section=section,
+            log_suffix=f"iter_{iteration}",
         )
 
         logger.info("Evaluation result: pass=%s", evaluation.pass_evaluation)
@@ -382,14 +511,18 @@ def evaluate_article(pdf_images: list, article: str, analysis: str) -> Evaluatio
         max=config["processing"]["api_settings"]["retry_max_wait"],
     ),
 )
-def revise_article(pdf_images: list, previous_article: str, feedback: str, analysis: str) -> str:
+def revise_article(
+    pdf_images: list, previous_article: str, feedback: str, analysis: str, section: str = "revision", iteration: int = 1
+) -> str:
     """Revise article based on evaluation feedback.
 
     Args:
-        pdf_images (list): List of base64-encoded PDF page images
+        pdf_images (list): List of base64-encoded PDF page images (not used, kept for compatibility)
         previous_article (str): Previous version of the article
         feedback (str): Feedback from evaluator
         analysis (str): Analysis result from paper analyzer
+        section (str, optional): Section name being revised. Defaults to "revision".
+        iteration (int, optional): Iteration number in revision loop. Defaults to 1.
 
     Returns:
         str: Revised article text
@@ -404,12 +537,15 @@ def revise_article(pdf_images: list, previous_article: str, feedback: str, analy
         model = writer_config.get("model", OPENAI_MODEL)
         api_provider = writer_config.get("api_provider", SELECT_API)
 
-        response = call_openai_with_images(
+        response = call_openai_text_only(
             system_prompt=get_article_writer_system_prompt(),
             user_prompt=get_article_revision_user_prompt(previous_article, feedback, analysis),
-            pdf_images=pdf_images,
             model=model,
             api_provider=api_provider,
+            response_format=TextResponse,
+            llm_role="article_writer",
+            section=section,
+            log_suffix=f"revision_{iteration}",
         )
         return response.content
     except Exception as e:
