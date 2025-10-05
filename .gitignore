@@ -10,3 +10,6 @@ notebook/
 log/
 
 .serena/
+.gitignore
+claudedocs/
+sample.html

@@ -63,7 +63,7 @@ sheets:
   # Spreadsheet and worksheet names
   spreadsheet_name: "AI-SCHOLAR運用管理システム"
   worksheet_name: "LLM-Papers"
-  
+
   # 「列名」: 「列インデックス」（1始まり）
   columns:
     title: 2
@@ -71,12 +71,24 @@ sheets:
     processing_date: 5
     detailed_summary: 6
     three_point_summary: 7
-    status: 8
+    status: 8  # 記事化列
     heading_names: 9
     article_title: 10
-  
+    cms_edit_link: 11  # CMS編集リンク列
+
   # Row configuration
   header_row_count: 1
+
+# CMS Configuration
+cms:
+  # Article creation settings
+  article_status_filter: "完了"  # Process rows where status column = "完了"
+
+  # CMS field selectors (will be determined during investigation)
+  selectors:
+    title_field: "input[name='title']"  # Placeholder
+    body_field: "textarea[name='body']"  # Placeholder
+    save_draft_button: "button.save-draft"  # Placeholder
 
 # Processing Configuration
 processing:
