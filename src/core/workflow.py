@@ -244,6 +244,20 @@ def generate_detailed_summary_with_workflow(pdf_images: list, sections: list) ->
     logger.info("Heading generation completed")
     logger.info("=" * 60)
 
+    # Replace fixed section names with generated headings in final summary
+    logger.info("Replacing section names with generated headings in final summary")
+    for section in sections:
+        generated_heading = section_headings.get(section)
+        if generated_heading:
+            old_heading = f"## {section}"
+            new_heading = f"## {generated_heading}"
+            final_summary = final_summary.replace(old_heading, new_heading)
+            logger.info("Replaced '%s' with '%s'", section, generated_heading)
+        else:
+            logger.warning("No heading generated for section '%s', keeping original name", section)
+
+    logger.info("Section heading replacement completed")
+
     # Phase 6: Article Title Generation
     logger.info("=" * 60)
     logger.info("Phase 6: Article Title Generation")

@@ -63,15 +63,17 @@ def process_single_paper(sheet, row_index: int, url: str, title: str):
         logger.info("Processing row %s: %s", row_index, title)
 
         detailed_summary, three_point_summary, heading_names, article_title = paper_reader(url, title)
+
+        # Prepend article title to detailed summary
+        detailed_summary_with_title = f"{article_title}\n\n{detailed_summary}"
+
         columns = {
             "processing_date": PROCESSING_DATE_COLUMN,
             "detailed_summary": DETAILED_SUMMARY_COLUMN,
             "three_point_summary": THREE_POINT_SUMMARY_COLUMN,
-            "heading_names": HEADING_NAMES_COLUMN,
-            "article_title": ARTICLE_TITLE_COLUMN,
             "status": STATUS_COLUMN,
         }
-        update_processing_results(sheet, row_index, detailed_summary, three_point_summary, heading_names, article_title, PROCESSING_DATE, columns)
+        update_processing_results(sheet, row_index, detailed_summary_with_title, three_point_summary, PROCESSING_DATE, columns)
 
         logger.info("Successfully processed row %s", row_index)
 

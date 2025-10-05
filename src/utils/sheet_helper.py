@@ -98,8 +98,6 @@ def update_processing_results(
     row_index: int,
     detailed_summary: str,
     three_point_summary: str,
-    heading_names: str,
-    article_title: str,
     processing_date: str,
     columns: dict,
 ):
@@ -108,21 +106,17 @@ def update_processing_results(
     Args:
         sheet: Google Sheets worksheet object
         row_index (int): Row index to update
-        detailed_summary (str): Detailed summary text
+        detailed_summary (str): Detailed summary text (with title prepended)
         three_point_summary (str): Three-point summary text
-        heading_names (str): Section heading names (newline-separated)
-        article_title (str): Generated article title
         processing_date (str): Processing date string
         columns (dict): Dictionary containing column indices with keys:
-            'processing_date', 'detailed_summary', 'three_point_summary', 'heading_names', 'article_title', 'status'
+            'processing_date', 'detailed_summary', 'three_point_summary', 'status'
     """
     # Prepare batch update data
     cell_updates = [
         {"range": f"{_get_column_letter(columns['processing_date'])}{row_index}", "values": [[processing_date]]},
         {"range": f"{_get_column_letter(columns['detailed_summary'])}{row_index}", "values": [[detailed_summary]]},
         {"range": f"{_get_column_letter(columns['three_point_summary'])}{row_index}", "values": [[three_point_summary]]},
-        {"range": f"{_get_column_letter(columns['heading_names'])}{row_index}", "values": [[heading_names]]},
-        {"range": f"{_get_column_letter(columns['article_title'])}{row_index}", "values": [[article_title]]},
         {"range": f"{_get_column_letter(columns['status'])}{row_index}", "values": [["完了"]]},
     ]
 
@@ -157,4 +151,18 @@ def mark_error_status(sheet, row_index: int, status_column: int):
         status_column (int): Column index for status field
     """
     cell_updates = [{"range": f"{_get_column_letter(status_column)}{row_index}", "values": [["エラー"]]}]
+    sheet.batch_update(cell_updates)
+
+
+@retry_on_rate_limit(max_retries=5, initial_delay=2.0)
+def update_cms_edit_link(sheet, row_index: int, edit_link_column: int, edit_url: str):
+    """Update CMS edit link for the specified row.
+
+    Args:
+        sheet: Google Sheets worksheet object
+        row_index (int): Row index to update
+        edit_link_column (int): Column index for CMS edit link field
+        edit_url (str): CMS edit URL to save
+    """
+    cell_updates = [{"range": f"{_get_column_letter(edit_link_column)}{row_index}", "values": [[edit_url]]}]
     sheet.batch_update(cell_updates)

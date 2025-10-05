@@ -8,3 +8,8 @@ content/
 ai-scholar-article-tool-5d544e52174c.json
 notebook/
 log/
+
+.serena/
+.gitignore
+claudedocs/
+sample.html
